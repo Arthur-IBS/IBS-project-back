@@ -1,0 +1,182 @@
+================================================================================
+  SYSTEM LOG REPORT — prod-server-01
+  Generated : 2026-05-15 11:55:00 UTC
+  Log Path  : /var/log/app/system.log
+  Host      : prod-server-01 | ENV: production | PID: 18432
+================================================================================
+
+----- STARTUP ---------------------------------------------------------------
+
+2026-05-15 00:00:00.001 [INFO]     [system        ] [PID:18432] Application starting up...
+2026-05-15 00:00:00.082 [INFO]     [system        ] [PID:18432] Loading configuration from /etc/app/config.yaml
+2026-05-15 00:00:00.143 [INFO]     [system        ] [PID:18432] Environment: PRODUCTION | Debug: FALSE | Log level: DEBUG
+2026-05-15 00:00:00.210 [INFO]     [db-primary    ] [PID:18434] Connecting to PostgreSQL @ db-host-01:5432 | pool_min=5 pool_max=20
+2026-05-15 00:00:00.391 [INFO]     [db-primary    ] [PID:18434] Database connection pool initialized | active=0 idle=5
+2026-05-15 00:00:00.420 [INFO]     [redis-cache   ] [PID:18436] Connecting to Redis @ redis-host-01:6379
+2026-05-15 00:00:00.480 [INFO]     [redis-cache   ] [PID:18436] Redis connected | version=7.2.3 | memory_used=412MB
+2026-05-15 00:00:00.501 [INFO]     [worker-queue  ] [PID:18441] Initializing job queues: [notifications, email_dispatch, reports, cleanup]
+2026-05-15 00:00:00.560 [INFO]     [worker-queue  ] [PID:18441] Worker pool started | workers=8 | queues=4
+2026-05-15 00:00:00.610 [INFO]     [auth-service  ] [PID:18433] JWT secret loaded | algo=HS256 | expiry=3600s
+2026-05-15 00:00:00.650 [INFO]     [mail-service  ] [PID:18440] SMTP config loaded | host=smtp.sendgrid.net | port=587 | tls=TRUE
+2026-05-15 00:00:00.700 [INFO]     [cdn-edge      ] [PID:18442] CDN edge initialized | regions=[ap-south-1, us-east-1, eu-west-1]
+2026-05-15 00:00:00.750 [INFO]     [api-gateway   ] [PID:18432] HTTP server listening on 0.0.0.0:8000
+2026-05-15 00:00:00.751 [INFO]     [system        ] [PID:18432] *** Application started successfully in 750ms ***
+
+----- HTTP REQUESTS ---------------------------------------------------------
+
+2026-05-15 06:01:12.001 [INFO]     [api-gateway   ] [PID:18432/T01] GET /health HTTP/1.1 | status=200 | dur=2ms | ip=10.0.0.1
+2026-05-15 06:14:33.220 [INFO]     [api-gateway   ] [PID:18432/T02] POST /api/v2/auth/login HTTP/1.1 | status=200 | dur=112ms | ip=203.0.113.42 | user=alfred@example.com
+2026-05-15 06:14:33.890 [INFO]     [api-gateway   ] [PID:18432/T03] GET /api/v2/users/profile HTTP/1.1 | status=200 | dur=38ms | ip=203.0.113.42
+2026-05-15 06:30:01.100 [WARN]     [api-gateway   ] [PID:18432/T04] Rate limit approaching | ip=198.51.100.14 | count=95/100 | window=60s
+2026-05-15 06:30:12.004 [WARN]     [api-gateway   ] [PID:18432/T04] Rate limit EXCEEDED | ip=198.51.100.14 | count=101/100 | blocked=true
+2026-05-15 07:02:44.331 [INFO]     [api-gateway   ] [PID:18432/T05] POST /api/v2/files/upload HTTP/1.1 | status=201 | dur=834ms | size=4.2MB | type=image/jpeg
+2026-05-15 07:15:09.440 [INFO]     [api-gateway   ] [PID:18432/T06] GET /api/v2/dashboard/metrics HTTP/1.1 | status=200 | dur=241ms | cache=MISS
+2026-05-15 07:45:22.100 [INFO]     [api-gateway   ] [PID:18432/T07] PUT /api/v2/users/90812/settings HTTP/1.1 | status=204 | dur=67ms
+2026-05-15 08:00:11.009 [INFO]     [api-gateway   ] [PID:18432/T01] PATCH /api/v2/orders/ORD-48821 HTTP/1.1 | status=200 | dur=91ms | field=status val=SHIPPED
+2026-05-15 08:12:30.550 [ERROR]    [api-gateway   ] [PID:18432/T02] DELETE /api/v2/users/00001 HTTP/1.1 | status=403 | dur=12ms | reason=Forbidden: insufficient permissions
+2026-05-15 08:30:00.003 [INFO]     [api-gateway   ] [PID:18432/T03] GET /api/v2/logs/stream HTTP/1.1 | status=200 | dur=9ms | ws=true | client=log-viewer
+2026-05-15 09:05:17.882 [ERROR]    [api-gateway   ] [PID:18432/T08] POST /api/v2/payments/charge HTTP/1.1 | status=502 | dur=5001ms | reason=Upstream timeout: stripe-api
+2026-05-15 09:05:17.883 [WARN]     [api-gateway   ] [PID:18432/T08] Retrying failed request | attempt=1/3 | backoff=1000ms
+2026-05-15 09:05:18.891 [WARN]     [api-gateway   ] [PID:18432/T08] Retrying failed request | attempt=2/3 | backoff=2000ms
+2026-05-15 09:05:20.910 [ERROR]    [api-gateway   ] [PID:18432/T08] All retries exhausted | endpoint=stripe-api | request_id=req_zxy991
+2026-05-15 10:22:44.010 [INFO]     [api-gateway   ] [PID:18432/T05] GET /static/js/chunk.3fa9.js HTTP/1.1 | status=200 | dur=4ms | cdn=HIT | size=148KB
+2026-05-15 11:54:34.100 [INFO]     [api-gateway   ] [PID:18432/T02] GET /health HTTP/1.1 | status=200 | dur=2ms | checks={db:OK, cache:OK, queue:DEGRADED}
+2026-05-15 11:55:00.001 [INFO]     [api-gateway   ] [PID:18432/T01] GET /api/v2/users/profile HTTP/1.1 | status=200 | dur=38ms | ip=203.0.113.42
+
+----- AUTHENTICATION --------------------------------------------------------
+
+2026-05-15 06:14:33.300 [DEBUG]    [auth-service  ] [PID:18433/T01] JWT validated | user_id=90812 | exp=1747396800 | scope="read:write"
+2026-05-15 06:14:33.310 [INFO]     [auth-service  ] [PID:18433/T01] Login SUCCESS | user_id=90812 | ip=203.0.113.42 | method=password
+2026-05-15 07:00:00.001 [INFO]     [auth-service  ] [PID:18433/T02] Refresh token rotated | user_id=44201 | old=rtok_old_abc | new=rtok_new_xyz
+2026-05-15 08:12:30.510 [TRACE]    [auth-service  ] [PID:18433/T03] Permission check | user_id=88102 | resource=user:delete | role=viewer | result=DENIED
+2026-05-15 08:58:11.020 [ERROR]    [auth-service  ] [PID:18433/T04] JWT signature invalid | token_prefix=eyJhbGci... | ip=91.108.4.10 | reason=tampered payload
+2026-05-15 09:15:00.440 [INFO]     [auth-service  ] [PID:18433/T05] User registered | user_id=90813 | email=new_user@gmail.com | provider=google-oauth2
+2026-05-15 09:32:00.200 [WARN]     [auth-service  ] [PID:18433/T06] Brute force detected | ip=45.33.32.156 | attempts=12 | window=60s | action=IP_BLOCKED
+2026-05-15 09:32:00.201 [INFO]     [auth-service  ] [PID:18433/T06] Blocked IP added to deny list | ip=45.33.32.156 | duration=3600s
+2026-05-15 10:05:00.800 [INFO]     [auth-service  ] [PID:18433/T02] Session expired | user_id=33901 | session_age=7200s | cleaned=true
+2026-05-15 10:45:12.001 [DEBUG]    [auth-service  ] [PID:18433/T01] OAuth2 token exchange | provider=github | user_id=90814 | scopes=[user:email]
+
+----- DATABASE --------------------------------------------------------------
+
+2026-05-15 06:14:33.500 [INFO]     [db-primary    ] [PID:18434/T01] Query OK | table=users | rows=1 | dur=4.2ms | idx=idx_users_email
+2026-05-15 06:30:00.100 [TRACE]    [db-primary    ] [PID:18434/T02] Connection returned to pool | active=7 | idle=13
+2026-05-15 07:10:14.782 [ERROR]    [db-primary    ] [PID:18434/T03] DeadlockDetected | txn_a=txn_d9f1 txn_b=txn_e2a8 | victim=txn_e2a8 | rolled_back=true
+2026-05-15 07:10:14.790 [WARN]     [db-primary    ] [PID:18434/T03] Retrying transaction | txn_id=txn_e2a8 | attempt=1/3
+2026-05-15 07:10:14.850 [INFO]     [db-primary    ] [PID:18434/T03] Transaction committed | txn_id=txn_e2a8_retry | ops=4 | dur=18ms
+2026-05-15 07:55:37.800 [WARN]     [db-primary    ] [PID:18434/T04] Missing index detected | table=events | col=created_at | full_scan=820441 rows | suggestion=CREATE INDEX idx_events_created_at ON events(created_at)
+2026-05-15 08:10:02.220 [WARN]     [db-primary    ] [PID:18434/T05] Slow query | dur=1842ms | threshold=1000ms | table=audit_logs | query_hash=0xf3a9b1
+2026-05-15 09:00:00.001 [INFO]     [db-primary    ] [PID:18434/T01] Auto-vacuum triggered | table=sessions | dead_tuples=48291 | dur=3200ms
+2026-05-15 10:00:00.001 [INFO]     [db-primary    ] [PID:18434/T02] Checkpoint completed | wal_size=128MB | dur=1100ms | sync=fsync
+2026-05-15 11:42:08.010 [CRITICAL] [db-primary    ] [PID:18434/T01] ConnectionTimeoutError | pool_size=20 | active=20 | waiting=47 | timeout=30000ms | POOL EXHAUSTED
+2026-05-15 11:42:08.011 [CRITICAL] [db-primary    ] [PID:18434/T01] Alerting on-call team | alert_id=ALT-9912 | channel=pagerduty | severity=P1
+2026-05-15 11:42:10.500 [WARN]     [db-primary    ] [PID:18434/T01] Pool recovering | active=14 | idle=6 | released_stale=6
+2026-05-15 11:50:00.001 [INFO]     [db-primary    ] [PID:18434/T02] Replication lag OK | replica=db-replica-01 | lag=0.8s | threshold=5s
+
+----- CACHE -----------------------------------------------------------------
+
+2026-05-15 06:14:33.700 [INFO]     [redis-cache   ] [PID:18436/T01] Cache HIT | key=session:tok_a8f3d | ttl=1800s | size=2.1KB
+2026-05-15 07:15:09.420 [INFO]     [redis-cache   ] [PID:18436/T02] Cache MISS | key=report:weekly:90812 | fallback=DB | generated=441ms
+2026-05-15 08:45:22.100 [INFO]     [redis-cache   ] [PID:18436/T01] Cache SET | key=leaderboard:daily | size=88.4KB | ttl=300s | eviction=LRU
+2026-05-15 09:00:00.002 [WARN]     [redis-cache   ] [PID:18436/T03] Memory usage | used=3.8GB / 4GB | evicted_keys=1240 | policy=allkeys-lru
+2026-05-15 09:30:00.001 [INFO]     [redis-cache   ] [PID:18436/T02] Cache FLUSH | pattern=report:* | keys_deleted=812 | dur=22ms
+2026-05-15 10:00:00.003 [DEBUG]    [redis-cache   ] [PID:18436/T01] Keyspace stats | total_keys=94812 | hits=48201 | misses=3921 | hit_rate=92.5%
+2026-05-15 11:30:00.001 [INFO]     [redis-cache   ] [PID:18436/T01] Cache SET | key=session:tok_new_xyz | size=1.8KB | ttl=3600s
+
+----- WORKER / QUEUE --------------------------------------------------------
+
+2026-05-15 06:00:00.001 [INFO]     [worker-queue  ] [PID:18441/T01] Cron triggered | job=cleanup_expired_sessions | schedule=*/30 * * * * | deleted=1482 rows | dur=340ms
+2026-05-15 07:00:00.001 [DEBUG]    [worker-queue  ] [PID:18441/T02] Job dequeued | queue=notifications | job_id=job_7c3b2a | priority=5 | wait=142ms
+2026-05-15 07:00:00.200 [INFO]     [worker-queue  ] [PID:18441/T02] Job completed | job_id=job_7c3b2a | type=push_notification | dur=198ms | status=SUCCESS
+2026-05-15 08:00:01.100 [INFO]     [worker-queue  ] [PID:18441/T03] Job started | job_id=job_9f2a1b | type=email_dispatch | queue=email_dispatch
+2026-05-15 08:00:01.304 [ERROR]    [worker-queue  ] [PID:18441/T03] Job FAILED | job_id=job_9f2a1b | type=email_dispatch | reason=SMTPAuthenticationError | attempt=1/3 | requeued=true
+2026-05-15 09:00:00.001 [INFO]     [worker-queue  ] [PID:18441/T04] Cron triggered | job=generate_daily_report | schedule=0 9 * * * | rows_processed=48291 | dur=8812ms
+2026-05-15 09:48:33.440 [WARN]     [worker-queue  ] [PID:18441/T05] Memory high | heap=1.82GB / 2GB | usage=91.2% | threshold=90% | action=GC_triggered
+2026-05-15 09:48:33.901 [INFO]     [worker-queue  ] [PID:18441/T05] GC completed | freed=340MB | heap_after=1.48GB | dur=461ms
+2026-05-15 10:30:00.001 [INFO]     [worker-queue  ] [PID:18441/T06] Job completed | job_id=job_d1e2f3 | type=report_export | size=2.1MB | dur=4120ms | status=SUCCESS
+2026-05-15 11:00:00.001 [INFO]     [worker-queue  ] [PID:18441/T01] Cron triggered | job=cleanup_expired_sessions | schedule=*/30 * * * * | deleted=892 rows | dur=210ms
+
+----- MAIL SERVICE ----------------------------------------------------------
+
+2026-05-15 08:00:01.310 [ERROR]    [mail-service  ] [PID:18440/T01] SMTPAuthenticationError | host=smtp.sendgrid.net | code=535 | msg=Authentication credentials invalid
+2026-05-15 08:00:03.410 [ERROR]    [mail-service  ] [PID:18440/T01] Retry 2/3 FAILED | host=smtp.sendgrid.net | code=535
+2026-05-15 08:00:05.620 [ERROR]    [mail-service  ] [PID:18440/T01] Retry 3/3 FAILED | host=smtp.sendgrid.net | code=535 | GIVING UP
+2026-05-15 08:00:05.621 [CRITICAL] [mail-service  ] [PID:18440/T01] Service UNREACHABLE | consecutive_failures=3 | circuit_breaker=OPEN
+2026-05-15 08:30:05.622 [WARN]     [mail-service  ] [PID:18440/T01] Circuit breaker half-open | testing connectivity...
+2026-05-15 08:30:06.100 [ERROR]    [mail-service  ] [PID:18440/T01] Connectivity test FAILED | circuit_breaker=OPEN | next_retry=300s
+2026-05-15 11:54:42.100 [CRITICAL] [mail-service  ] [PID:18440/T01] Service UNREACHABLE | consecutive_failures=189 | circuit_breaker=OPEN | queued_emails=1204 | next_retry=300s
+
+----- CDN / STATIC ----------------------------------------------------------
+
+2026-05-15 06:00:00.010 [INFO]     [cdn-edge      ] [PID:18442/T01] Cache purge complete | region=ap-south-1 | keys_purged=2048 | dur=112ms
+2026-05-15 08:20:44.200 [INFO]     [cdn-edge      ] [PID:18442/T01] Cache MISS → origin fetch | url=/static/js/chunk.3fa9.js | size=148KB | cached=true | ttl=86400s
+2026-05-15 09:41:22.100 [WARN]     [cdn-edge      ] [PID:18442/T02] Origin latency high | region=ap-south-1 | p95=1240ms | baseline=120ms | threshold=500ms
+2026-05-15 10:00:00.005 [INFO]     [cdn-edge      ] [PID:18442/T01] SSL cert check | domain=app.example.com | expiry=2026-08-20 | days_remaining=97 | status=OK
+2026-05-15 11:10:33.400 [INFO]     [cdn-edge      ] [PID:18442/T03] Traffic spike | rps=4820 | baseline=1200 | region=ap-south-1 | auto_scaled=true
+
+----- SECURITY --------------------------------------------------------------
+
+2026-05-15 08:58:11.020 [ERROR]    [auth-service  ] [PID:18433/T04] JWT signature invalid | ip=91.108.4.10 | user_agent=python-requests/2.28.0 | action=REQUEST_BLOCKED
+2026-05-15 09:32:00.200 [WARN]     [auth-service  ] [PID:18433/T06] Brute force detected | ip=45.33.32.156 | attempts=12/10 | window=60s | action=IP_BLOCKED
+2026-05-15 09:45:10.001 [WARN]     [api-gateway   ] [PID:18432/T09] Suspicious payload | ip=45.33.32.156 | pattern=SQL_INJECTION | path=/api/v2/search | action=BLOCKED
+2026-05-15 10:00:01.100 [INFO]     [system        ] [PID:18432   ] Security scan complete | vulnerabilities=0 | last_scan=2026-05-14T10:00:00Z
+2026-05-15 10:15:00.002 [WARN]     [api-gateway   ] [PID:18432/T10] CORS violation | origin=http://evil.example.com | path=/api/v2/users | action=REJECTED
+
+----- SYSTEM METRICS --------------------------------------------------------
+
+2026-05-15 06:00:00.000 [INFO]     [system        ] [PID:18432] Metrics | cpu=24.1% | mem=6.2/16GB | disk_io=88MB/s | net_in=1.1GB/h | net_out=0.6GB/h
+2026-05-15 07:00:00.000 [INFO]     [system        ] [PID:18432] Metrics | cpu=51.3% | mem=8.8/16GB | disk_io=110MB/s | net_in=2.1GB/h | net_out=1.0GB/h
+2026-05-15 08:00:00.000 [INFO]     [system        ] [PID:18432] Metrics | cpu=68.2% | mem=10.4/16GB | disk_io=132MB/s | net_in=3.0GB/h | net_out=1.5GB/h
+2026-05-15 09:00:00.000 [INFO]     [system        ] [PID:18432] Metrics | cpu=72.9% | mem=11.8/16GB | disk_io=148MB/s | net_in=3.4GB/h | net_out=1.9GB/h
+2026-05-15 10:00:00.000 [INFO]     [system        ] [PID:18432] Metrics | cpu=65.4% | mem=10.9/16GB | disk_io=138MB/s | net_in=3.1GB/h | net_out=1.7GB/h
+2026-05-15 11:00:00.000 [INFO]     [system        ] [PID:18432] Metrics | cpu=72.4% | mem=11.2/16GB | disk_io=142MB/s | net_in=3.2GB/h | net_out=1.8GB/h
+
+----- ERRORS & EXCEPTIONS ---------------------------------------------------
+
+2026-05-15 07:10:14.782 [ERROR]    [db-primary    ] [PID:18434/T03] Exception: DeadlockDetected
+                                                                     at db.transaction (db/transaction.py:142)
+                                                                     at OrderService.updateStatus (services/order.py:88)
+                                                                     at api.patch_order (api/orders.py:55)
+                                                                     txn_a=txn_d9f1 | txn_b=txn_e2a8 | victim=txn_e2a8
+
+2026-05-15 08:12:30.550 [ERROR]    [api-gateway   ] [PID:18432/T02] Exception: PermissionDenied
+                                                                     at auth.require_permission (auth/decorators.py:31)
+                                                                     at UserController.delete (controllers/user.py:204)
+                                                                     at api.delete_user (api/users.py:77)
+                                                                     user_id=88102 | required_role=admin | actual_role=viewer
+
+2026-05-15 09:05:17.882 [ERROR]    [api-gateway   ] [PID:18432/T08] Exception: UpstreamTimeoutError
+                                                                     at http_client.post (utils/http.py:88)
+                                                                     at PaymentService.charge (services/payment.py:55)
+                                                                     at api.charge (api/payments.py:33)
+                                                                     upstream=stripe-api | timeout=5000ms | request_id=req_zxy991
+
+2026-05-15 11:42:08.010 [CRITICAL] [db-primary    ] [PID:18434/T01] Exception: ConnectionPoolExhausted
+                                                                     at db.pool.acquire (db/pool.py:91)
+                                                                     at db.execute (db/connection.py:44)
+                                                                     pool_size=20 | active=20 | waiting=47 | timeout=30000ms
+
+----- SHUTDOWN (graceful) ---------------------------------------------------
+
+2026-05-15 23:59:55.001 [INFO]     [system        ] [PID:18432] Received SIGTERM — initiating graceful shutdown
+2026-05-15 23:59:55.100 [INFO]     [api-gateway   ] [PID:18432] Stopped accepting new connections | active_requests=14
+2026-05-15 23:59:55.200 [INFO]     [worker-queue  ] [PID:18441] Draining queues | pending_jobs=22
+2026-05-15 23:59:57.400 [INFO]     [worker-queue  ] [PID:18441] All jobs drained | dur=2200ms
+2026-05-15 23:59:57.500 [INFO]     [db-primary    ] [PID:18434] Closing connection pool | active=0 | closed=20
+2026-05-15 23:59:57.600 [INFO]     [redis-cache   ] [PID:18436] Redis connection closed gracefully
+2026-05-15 23:59:57.700 [INFO]     [api-gateway   ] [PID:18432] All requests completed | total_handled=48291
+2026-05-15 23:59:57.750 [INFO]     [system        ] [PID:18432] *** Application shut down cleanly in 2749ms ***
+
+================================================================================
+  SUMMARY
+  Date       : 2026-05-15
+  Total Logs : 48,291
+  INFO       : 41,084  (85.1%)
+  DEBUG      :  1,892  ( 3.9%)
+  TRACE      :    215  ( 0.4%)
+  WARN       :  4,912  (10.2%)
+  ERROR      :  2,108  ( 4.4%)
+  CRITICAL   :    187  ( 0.4%)
+  Uptime     : 23h 59m 57s
+  Avg Response: 142ms | P95: 890ms | P99: 2100ms
+  Total Req  : 18,492 | 2xx: 17,801 | 4xx: 512 | 5xx: 179
+================================================================================
