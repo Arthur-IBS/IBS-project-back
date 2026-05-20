@@ -1,3 +1,7 @@
 from django.db import models
-
-# Create your models here.
+ 
+class LogConfig(models.Model):
+    location = models.CharField(max_length=500)
+ 
+    class Meta:
+        db_table = 'log_config'
