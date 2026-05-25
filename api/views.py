@@ -27,27 +27,21 @@ def get_log_content(request):
     })
  
  
-# POST - save log file location to db for the first time
-@api_view(['POST'])
-def set_log_location(request):
-    serializer = LogConfigSerializer(data=request.data)
-    if serializer.is_valid():
-        serializer.save()
+@api_view(['POST', 'PUT'])
+def manage_log_location(request):
+    location = request.data.get('location')
+    
+    if not location:
+        return Response({'error': 'location is required'}, status=400)
+    
+    config, created = LogConfig.objects.update_or_create(
+        id=1,
+        defaults={'location': location}
+    )
+    
+    serializer = LogConfigSerializer(config)
+    
+    if created:
         return Response(serializer.data, status=201)
-    return Response(serializer.errors, status=400)
- 
- 
-# PUT - update existing log file location
-@api_view(['PUT'])
-def update_log_location(request, pk):
-    try:
-        config = LogConfig.objects.get(pk=pk)
-    except LogConfig.DoesNotExist:
-        return Response({'error': 'Not found'}, status=404)
- 
-    serializer = LogConfigSerializer(config, data=request.data)
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data)
-    return Response(serializer.errors, status=400)
- 
+    else:
+        return Response(serializer.data, status=200)
