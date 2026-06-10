@@ -1,80 +1,77 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from django.http import Http404, HttpResponse
-from .models import LogConfig, LogEntry
+from django.http import HttpResponse
+from .models import LogConfig
 from .serializers import LogConfigSerializer
+from elasticsearch import Elasticsearch
 from datetime import datetime, timedelta
-import pytz 
+import pytz
 import os
 import csv
 import io
  
 IST = pytz.timezone('Asia/Kolkata')
+ES_HOST = "http://localhost:9200"
+ES_INDEX = "logpro-logs"
+ 
+es = Elasticsearch([ES_HOST])
  
  
-def parse_new_line(line):
-    try:
-        line = line.strip()
-        if not line.startswith('['):
-            return None
-        dt_str = line[1:20]
-        timestamp = datetime.strptime(dt_str, "%d.%m.%Y %H:%M:%S")
-        timestamp = IST.localize(timestamp)
-        parts = line.split(', ', 2)
-        if len(parts) < 3:
-            return None
-        thread = parts[1].strip()
-        remainder = parts[2].strip()
-        if not remainder:
-            return None
-        level = remainder[0]
-        message = remainder[1:].strip()
-        return {
-            'timestamp': timestamp,
-            'level': level,
-            'thread': thread,
-            'message': message,
-        }
-    except:
-        return None
+def build_query(levels, date_from, date_to, time_from, time_to):
+    must = []
  
- 
-def sync_new_logs(file_path):
-    last_entry = LogEntry.objects.order_by('-timestamp').first()
-    last_timestamp = last_entry.timestamp if last_entry else None
- 
-    batch = []
-    current_line = ''
- 
-    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-        for line in f:
-            line = line.rstrip('\n')
-            stripped = line.strip()
- 
-            if not stripped:
-                continue
- 
-            if stripped.startswith('['):
-                if current_line:
-                    parsed = parse_new_line(current_line)
-                    if parsed:
-                        if last_timestamp is None or parsed['timestamp'] > last_timestamp:
-                            batch.append(LogEntry(**parsed))
-                        if len(batch) >= 1000:
-                            LogEntry.objects.bulk_create(batch, ignore_conflicts=True)
-                            batch = []
-                current_line = stripped
+    # Date + time range filter using log_timestamp string field
+    if date_from and date_to:
+        try:
+            # Build start and end as full datetime strings matching log_timestamp format
+            if time_from:
+                start_str = datetime.strptime(
+                    f"{date_from} {time_from}", "%Y-%m-%d %H:%M"
+                ).strftime("%d.%m.%Y %H:%M:%S")
             else:
-                current_line += ' ' + stripped
+                start_str = datetime.strptime(date_from, "%Y-%m-%d").strftime("%d.%m.%Y") + " 00:00:00"
  
-        if current_line:
-            parsed = parse_new_line(current_line)
-            if parsed:
-                if last_timestamp is None or parsed['timestamp'] > last_timestamp:
-                    batch.append(LogEntry(**parsed))
+            if time_to:
+                end_str = datetime.strptime(
+                    f"{date_to} {time_to}", "%Y-%m-%d %H:%M"
+                ).strftime("%d.%m.%Y %H:%M:%S")
+            else:
+                end_str = datetime.strptime(date_to, "%Y-%m-%d").strftime("%d.%m.%Y") + " 23:59:59"
  
-    if batch:
-        LogEntry.objects.bulk_create(batch, ignore_conflicts=True)
+            # Use @timestamp for range but convert IST to UTC
+            start_ist = IST.localize(datetime.strptime(start_str, "%d.%m.%Y %H:%M:%S"))
+            end_ist = IST.localize(datetime.strptime(end_str, "%d.%m.%Y %H:%M:%S"))
+ 
+            must.append({
+                "range": {
+                    "@timestamp": {
+                        "gte": start_ist.isoformat(),
+                        "lte": end_ist.isoformat()
+                    }
+                }
+            })
+        except ValueError:
+            pass
+ 
+    # Level filter
+    if levels:
+        must.append({
+            "terms": {"level.keyword": levels}
+        })
+ 
+    if not must:
+        return {"match_all": {}}
+ 
+    return {"bool": {"must": must}}
+ 
+ 
+def format_hit(hit):
+    src = hit["_source"]
+    timestamp = src.get("log_timestamp", "")
+    thread = src.get("thread", "")
+    level = src.get("level", "")
+    message = src.get("message", "")
+    return f"[{timestamp}], {thread}, {level} {message}"
  
  
 @api_view(['GET'])
@@ -83,16 +80,6 @@ def get_log_content(request):
         config = LogConfig.objects.get(id=1)
     except LogConfig.DoesNotExist:
         return Response({'error': 'Log location not configured yet.'}, status=404)
- 
-    file_path = config.location
- 
-    if not os.path.exists(file_path):
-        raise Http404("Log file not found")
- 
-    try:
-        sync_new_logs(file_path)
-    except Exception:
-        pass
  
     page = int(request.GET.get('page', 1))
     levels_param = request.GET.get('levels', None)
@@ -109,67 +96,42 @@ def get_log_content(request):
             status=400
         )
  
-    queryset = LogEntry.objects.all()
- 
-    if date_from and date_to:
-        try:
-            start_dt = IST.localize(datetime.strptime(date_from, "%Y-%m-%d").replace(hour=0, minute=0, second=0))
-            end_dt = IST.localize(datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59))
-            queryset = queryset.filter(timestamp__range=(start_dt, end_dt))
-        except ValueError:
-            return Response({'error': 'Invalid date format.'}, status=400)
-    else:
-        # default — last 1 hour from latest entry
-        latest = LogEntry.objects.order_by('-timestamp').first()
-        if latest:
-            one_hour_ago = latest.timestamp - timedelta(hours=1)
-            queryset = queryset.filter(timestamp__gte=one_hour_ago)
- 
-    # time of day filter
-    if time_from or time_to:
-        time_from_dt = datetime.strptime(time_from, "%H:%M") if time_from else None
-        time_to_dt = datetime.strptime(time_to, "%H:%M") if time_to else None
-        filtered_ids = []
-        for entry in queryset:
-            ist_time = entry.timestamp.astimezone(IST)
-            entry_minutes = ist_time.hour * 60 + ist_time.minute
-            if time_from_dt:
-                if entry_minutes < time_from_dt.hour * 60 + time_from_dt.minute:
-                    continue
-            if time_to_dt:
-                if entry_minutes > time_to_dt.hour * 60 + time_to_dt.minute:
-                    continue
-            filtered_ids.append(entry.id)
-        queryset = LogEntry.objects.filter(id__in=filtered_ids)
- 
-    if levels:
-        queryset = queryset.filter(level__in=levels)
- 
     page_size = 500
-    total = queryset.count()
-    queryset = queryset.order_by('-timestamp')
     offset = (page - 1) * page_size
-    entries = list(queryset[offset:offset + page_size])
+    query = build_query(levels, date_from, date_to, time_from, time_to)
+ 
+    try:
+        result = es.search(
+            index=ES_INDEX,
+            query=query,
+            size=page_size,
+            from_=offset,
+            sort=[{"@timestamp": {"order": "desc"}}]
+        )
+        hits = result["hits"]["hits"]
+        total = result["hits"]["total"]["value"]
+    except Exception as e:
+        return Response({'error': f'Elasticsearch error: {str(e)}'}, status=500)
+ 
+    lines = [format_hit(h) for h in hits]
+ 
+    # Reverse so oldest at top, latest at bottom — CMD/terminal style
+    lines = lines[::-1]
+ 
     has_more = (offset + page_size) < total
  
-    lines = []
-    for entry in entries:
-        dt = entry.timestamp.astimezone(IST).strftime("%d.%m.%Y %H:%M:%S")
-        line = f"[{dt}], {entry.thread}, {entry.level}  {entry.message}"
-        lines.append(line)
- 
-    if entries:
-        window_start = entries[-1].timestamp.astimezone(IST).strftime("%d.%m.%Y %H:%M:%S")
-        window_end = entries[0].timestamp.astimezone(IST).strftime("%d.%m.%Y %H:%M:%S")
-    else:
-        window_start = window_end = ""
+    window_start = ""
+    window_end = ""
+    if hits:
+        window_end = hits[0]["_source"].get("log_timestamp", "")
+        window_start = hits[-1]["_source"].get("log_timestamp", "")
  
     return Response({
         'lines': lines,
         'page': page,
         'total_lines': total,
         'has_more': has_more,
-        'filename': os.path.basename(file_path),
+        'filename': os.path.basename(config.location),
         'window_start': window_start,
         'window_end': window_end,
     })
@@ -192,45 +154,30 @@ def export_logs_csv(request):
     if not date_from or not date_to:
         return Response({'error': 'date_from and date_to are required for export.'}, status=400)
  
+    query = build_query(levels, date_from, date_to, time_from, time_to)
+ 
     try:
-        start_dt = IST.localize(datetime.strptime(date_from, "%Y-%m-%d").replace(hour=0, minute=0, second=0))
-        end_dt = IST.localize(datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59))
-    except ValueError:
-        return Response({'error': 'Invalid date format.'}, status=400)
- 
-    queryset = LogEntry.objects.filter(timestamp__range=(start_dt, end_dt))
- 
-    if levels:
-        queryset = queryset.filter(level__in=levels)
- 
-    if time_from or time_to:
-        time_from_dt = datetime.strptime(time_from, "%H:%M") if time_from else None
-        time_to_dt = datetime.strptime(time_to, "%H:%M") if time_to else None
-        filtered_ids = []
-        for entry in queryset:
-            ist_time = entry.timestamp.astimezone(IST)
-            entry_minutes = ist_time.hour * 60 + ist_time.minute
-            if time_from_dt:
-                if entry_minutes < time_from_dt.hour * 60 + time_from_dt.minute:
-                    continue
-            if time_to_dt:
-                if entry_minutes > time_to_dt.hour * 60 + time_to_dt.minute:
-                    continue
-            filtered_ids.append(entry.id)
-        queryset = LogEntry.objects.filter(id__in=filtered_ids)
- 
-    queryset = queryset.order_by('timestamp')
+        result = es.search(
+            index=ES_INDEX,
+            query=query,
+            size=10000,
+            sort=[{"@timestamp": {"order": "asc"}}]
+        )
+        hits = result["hits"]["hits"]
+    except Exception as e:
+        return Response({'error': f'Elasticsearch error: {str(e)}'}, status=500)
  
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(['timestamp', 'thread', 'level', 'message'])
  
-    for entry in queryset:
+    for hit in hits:
+        src = hit["_source"]
         writer.writerow([
-            entry.timestamp.astimezone(IST).strftime("%d.%m.%Y %H:%M:%S"),
-            entry.thread,
-            entry.level,
-            entry.message,
+            src.get("log_timestamp", ""),
+            src.get("thread", ""),
+            src.get("level", ""),
+            src.get("message", ""),
         ])
  
     output.seek(0)
