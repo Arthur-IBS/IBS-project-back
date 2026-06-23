@@ -5,25 +5,45 @@ from .models import LogConfig
 from .serializers import LogConfigSerializer
 from elasticsearch import Elasticsearch
 from datetime import datetime, timedelta
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+from drf_spectacular.types import OpenApiTypes
 import pytz
 import os
 import csv
 import io
+from dotenv import load_dotenv
+ 
+load_dotenv()
  
 IST = pytz.timezone('Asia/Kolkata')
-ES_HOST = "http://localhost:9200"
-ES_INDEX = "logpro-logs"
+ES_HOST = os.getenv("ES_HOST", "http://localhost:9200")
+ES_INDEX_PREFIX = os.getenv("ES_INDEX_PREFIX", "logpro")
  
 es = Elasticsearch([ES_HOST])
  
  
-def build_query(levels, date_from, date_to, time_from, time_to):
+def get_latest_timestamp(index):
+    """Get the latest @timestamp from ES index"""
+    try:
+        result = es.search(
+            index=index,
+            size=1,
+            sort=[{"@timestamp": {"order": "desc"}}],
+            query={"match_all": {}}
+        )
+        hits = result["hits"]["hits"]
+        if hits:
+            return hits[0]["_source"].get("@timestamp")
+    except:
+        pass
+    return None
+ 
+ 
+def build_query(levels, date_from, date_to, time_from, time_to, index=None):
     must = []
  
-    # Date + time range filter using log_timestamp string field
     if date_from and date_to:
         try:
-            # Build start and end as full datetime strings matching log_timestamp format
             if time_from:
                 start_str = datetime.strptime(
                     f"{date_from} {time_from}", "%Y-%m-%d %H:%M"
@@ -38,7 +58,6 @@ def build_query(levels, date_from, date_to, time_from, time_to):
             else:
                 end_str = datetime.strptime(date_to, "%Y-%m-%d").strftime("%d.%m.%Y") + " 23:59:59"
  
-            # Use @timestamp for range but convert IST to UTC
             start_ist = IST.localize(datetime.strptime(start_str, "%d.%m.%Y %H:%M:%S"))
             end_ist = IST.localize(datetime.strptime(end_str, "%d.%m.%Y %H:%M:%S"))
  
@@ -52,8 +71,9 @@ def build_query(levels, date_from, date_to, time_from, time_to):
             })
         except ValueError:
             pass
+    else:
+        pass
  
-    # Level filter
     if levels:
         must.append({
             "terms": {"level.keyword": levels}
@@ -74,12 +94,24 @@ def format_hit(hit):
     return f"[{timestamp}], {thread}, {level} {message}"
  
  
+@extend_schema(
+    summary="Fetch log content",
+    description="Returns paginated log lines from Elasticsearch with optional filters",
+    parameters=[
+        OpenApiParameter('page', OpenApiTypes.INT, description='Page number'),
+        OpenApiParameter('app', OpenApiTypes.STR, description='Application name'),
+        OpenApiParameter('levels', OpenApiTypes.STR, description='Comma separated levels e.g. W,E'),
+        OpenApiParameter('date_from', OpenApiTypes.DATE, description='Start date YYYY-MM-DD'),
+        OpenApiParameter('date_to', OpenApiTypes.DATE, description='End date YYYY-MM-DD'),
+        OpenApiParameter('time_from', OpenApiTypes.STR, description='Start time HH:MM requires date'),
+        OpenApiParameter('time_to', OpenApiTypes.STR, description='End time HH:MM requires date'),
+    ],
+    responses={200: None}
+)
 @api_view(['GET'])
-def get_log_content(request):
-    try:
-        config = LogConfig.objects.get(id=1)
-    except LogConfig.DoesNotExist:
-        return Response({'error': 'Log location not configured yet.'}, status=404)
+def get_log_content(request): 
+    app = request.GET.get('app', os.getenv("APP_NAME", "logs"))
+    ES_INDEX = f"{ES_INDEX_PREFIX}-{app}"
  
     page = int(request.GET.get('page', 1))
     levels_param = request.GET.get('levels', None)
@@ -98,7 +130,7 @@ def get_log_content(request):
  
     page_size = 500
     offset = (page - 1) * page_size
-    query = build_query(levels, date_from, date_to, time_from, time_to)
+    query = build_query(levels, date_from, date_to, time_from, time_to, index=ES_INDEX)
  
     try:
         result = es.search(
@@ -114,8 +146,6 @@ def get_log_content(request):
         return Response({'error': f'Elasticsearch error: {str(e)}'}, status=500)
  
     lines = [format_hit(h) for h in hits]
- 
-    # Reverse so oldest at top, latest at bottom — CMD/terminal style
     lines = lines[::-1]
  
     has_more = (offset + page_size) < total
@@ -131,18 +161,34 @@ def get_log_content(request):
         'page': page,
         'total_lines': total,
         'has_more': has_more,
-        'filename': os.path.basename(config.location),
+        'filename': f"{app}.logs",
         'window_start': window_start,
         'window_end': window_end,
     })
  
  
+@extend_schema(
+    summary="Export logs as CSV",
+    description="Downloads filtered logs as a CSV file",
+    parameters=[
+        OpenApiParameter('date_from', OpenApiTypes.DATE, required=True),
+        OpenApiParameter('date_to', OpenApiTypes.DATE, required=True),
+        OpenApiParameter('time_from', OpenApiTypes.STR),
+        OpenApiParameter('time_to', OpenApiTypes.STR),
+        OpenApiParameter('levels', OpenApiTypes.STR),
+        OpenApiParameter('app', OpenApiTypes.STR),
+    ],
+    responses={200: None}
+)
 @api_view(['GET'])
 def export_logs_csv(request):
     try:
         config = LogConfig.objects.get(id=1)
     except LogConfig.DoesNotExist:
         return Response({'error': 'Log location not configured yet.'}, status=404)
+ 
+    app = request.GET.get('app', os.getenv("APP_NAME", "logs"))
+    ES_INDEX = f"{ES_INDEX_PREFIX}-{app}"
  
     date_from = request.GET.get('date_from', None)
     date_to = request.GET.get('date_to', None)
@@ -154,7 +200,7 @@ def export_logs_csv(request):
     if not date_from or not date_to:
         return Response({'error': 'date_from and date_to are required for export.'}, status=400)
  
-    query = build_query(levels, date_from, date_to, time_from, time_to)
+    query = build_query(levels, date_from, date_to, time_from, time_to, index=ES_INDEX)
  
     try:
         result = es.search(
@@ -187,6 +233,29 @@ def export_logs_csv(request):
     return response
  
  
+@extend_schema(
+    summary="Get all configured applications",
+    description="Returns list of all applications configured in the system",
+    responses={200: None}
+)
+@api_view(['GET'])
+def get_apps(request):
+    apps = LogConfig.objects.all().values('id', 'location')
+    app_list = []
+    for app in apps:
+        app_name = os.getenv("APP_NAME", "logs")
+        app_list.append({
+            "app_name": app_name,
+            "es_index": f"{ES_INDEX_PREFIX}-{app_name}"
+        })
+    return Response(app_list)
+ 
+ 
+@extend_schema(
+    summary="Set or update log file location",
+    description="Configure the log file path for monitoring",
+    responses={200: LogConfigSerializer}
+)
 @api_view(['POST', 'PUT'])
 def manage_log_location(request):
     location = request.data.get('location')
