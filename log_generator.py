@@ -117,7 +117,7 @@ if __name__ == "__main__":
  
     # Write startup sequence
     thread = "t9524"
-    write_log("I", thread, "*" * 60)
+    write_log("I", thread, "*" * 59)
     write_log("I", thread, "Server Version: 4.15.0 x64")
     write_log("I", thread, "Starting Server...")
     write_log("I", thread, "Loading configuration.")

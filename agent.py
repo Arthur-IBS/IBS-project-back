@@ -5,8 +5,11 @@ import requests
 from datetime import datetime
 import pytz
 from dotenv import load_dotenv
- 
-load_dotenv()
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('--env', default='.env')
+args = parser.parse_args()
+load_dotenv(args.env)
  
 # Config from .env
 LOG_FILE = os.getenv("AGENT_LOG_FILE", "logs/app.log")
@@ -78,6 +81,7 @@ def read_new_lines():
     last_pos = get_last_position()
     current_size = os.path.getsize(LOG_FILE)
  
+ 
     if current_size < last_pos:
         print("[INFO] Log file reset detected, reading from beginning")
         last_pos = 0
@@ -124,30 +128,37 @@ def send_to_logstash(docs):
     attempt = 0
     while attempt < MAX_RETRIES:
         try:
-            for doc in docs:
-                res = requests.post(
-                    LOGSTASH_URL,
-                    json=doc,
-                    headers={"Content-Type": "application/json"},
-                    timeout=5
-                )
-                if res.status_code not in (200, 201):
-                    print(f"[WARN] Logstash returned {res.status_code}")
+            batch_size = 100
+            total_sent = 0
  
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Sent {len(docs)} lines to Logstash")
+            for i in range(0, len(docs), batch_size):
+                batch = docs[i:i + batch_size]
+                for doc in batch:
+                    res = requests.post(
+                        LOGSTASH_URL,
+                        json=doc,
+                        headers={"Content-Type": "application/json"},
+                        timeout=10
+                    )
+                    if res.status_code not in (200, 201):
+                        print(f"[WARN] Logstash returned {res.status_code}")
+                total_sent += len(batch)
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] Sent {total_sent}/{len(docs)} lines...")
+ 
+            print(f"[DONE] Sent all {len(docs)} lines to Logstash")
             return True
  
         except Exception as e:
             attempt += 1
-            print(f"[ERROR] Logstash unreachable (attempt {attempt}/{MAX_RETRIES}): {e}")
+            print(f"[ERROR] Attempt {attempt}/{MAX_RETRIES}: {e}")
             if attempt < MAX_RETRIES:
-                print(f"[INFO] Retrying in {RETRY_DELAY_SECONDS} seconds...")
                 time.sleep(RETRY_DELAY_SECONDS)
             else:
-                print(f"[FATAL] All retries failed. Will retry next cycle.")
+                print(f"[FATAL] All retries failed.")
                 return False
  
     return False
+ 
  
  
 async def run_agent():
@@ -159,7 +170,7 @@ async def run_agent():
     print(f"Interval: {INTERVAL_SECONDS} seconds")
     print(f"Max retries: {MAX_RETRIES}")
     print("=" * 50)
- 
+
     while True:
         try:
             docs, new_pos = read_new_lines()
@@ -171,10 +182,11 @@ async def run_agent():
                     print(f"[INFO] Position not advanced — {len(docs)} lines will be retried next cycle")
         except Exception as e:
             print(f"[ERROR] Agent error: {e}")
- 
+
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Next run in {INTERVAL_SECONDS} seconds...")
         await asyncio.sleep(INTERVAL_SECONDS)
- 
- 
+
+
 if __name__ == "__main__":
     asyncio.run(run_agent())
  
